@@ -27,6 +27,9 @@ var mesh_instances: Array[ShadowMesh] = []
 
 var shadow_tiers: Array[ShadowTier] = []
 
+@export var vertex_shader_path: String = "res://shadow_system/shaders/shadow_vert.spv"
+@export var fragment_shader_path: String = "res://shadow_system/shaders/shadow_frag.spv"
+
 #var rect: TextureRect
 
 
@@ -133,8 +136,8 @@ func get_fixed_view_transform(xform : Transform3D) -> Transform3D:
 
 
 func _load_shader():
-	var vert_code = FileAccess.get_file_as_bytes("res://shaders/shadow_vert.spv")
-	var frag_code = FileAccess.get_file_as_bytes("res://shaders/shadow_frag.spv")
+	var vert_code = FileAccess.get_file_as_bytes(vertex_shader_path)
+	var frag_code = FileAccess.get_file_as_bytes(fragment_shader_path)
 
 	var shader_spirv = RDShaderSPIRV.new()
 	shader_spirv.bytecode_vertex = vert_code
