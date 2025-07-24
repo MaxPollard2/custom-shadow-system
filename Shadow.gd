@@ -55,7 +55,6 @@ func _ready() -> void:
 		#shadow_tier._init(self, rd)
 	
 	
-	
 	_setup_pipeline()
 	
 	_run_pipeline()
@@ -91,13 +90,17 @@ func _process(delta: float) -> void:
 		#counter = 0
 	
 
+func get_tex():
+	if shadow_tiers.size() > 0:
+		return shadow_tiers[0].color_texture
+
 func _run(delta: float):
 	for shadow_tier in shadow_tiers:
 		shadow_tier._update_buffer()
 		
 	_run_pipeline()
 	
-	RenderingServer.global_shader_parameter_set("light_pos", global_position)
+	#RenderingServer.global_shader_parameter_set("light_pos", global_position)
 
 
 func _run_pipeline():
@@ -106,10 +109,17 @@ func _run_pipeline():
 		rd.draw_list_bind_render_pipeline(draw_list, pipeline)
 		rd.draw_list_bind_uniform_set(draw_list, shadow_tier.view_proj_uniform_set, 0)
 		for i in range(mesh_instances.size()):
-			rd.draw_list_bind_vertex_array(draw_list, mesh_instances[i].get_vertex_array_rid())
-			rd.draw_list_bind_index_array(draw_list, mesh_instances[i].get_index_array_rid())
-			rd.draw_list_bind_uniform_set(draw_list, mesh_instances[i].get_model_uniform_set(), 1)
-			rd.draw_list_draw(draw_list, true, 1)
+			var mesh = mesh_instances[i]
+			if mesh.visible == false: continue
+			rd.draw_list_bind_vertex_array(draw_list, mesh.get_vertex_array_rid())
+
+			if mesh.has_index_array():
+				rd.draw_list_bind_index_array(draw_list, mesh.get_index_array_rid())
+				rd.draw_list_bind_uniform_set(draw_list, mesh.get_model_uniform_set(), 1)
+				rd.draw_list_draw(draw_list, true, 1)
+			else:
+				rd.draw_list_bind_uniform_set(draw_list, mesh.get_model_uniform_set(), 1)
+				rd.draw_list_draw(draw_list, false, 1)  # false = non-indexed draw
 		rd.draw_list_end()
 	
 func _register_existing_shadow_meshes():
@@ -118,14 +128,16 @@ func _register_existing_shadow_meshes():
 
 
 func _on_node_added(node: Node):
-	if node.is_in_group("shadow_meshes"):
+	if node is ShadowMesh:
 		_register_shadow_caster(node)
 
 
 func _register_shadow_caster(caster: ShadowMesh):
-	caster.initialize(rd, shader_rid)
+	caster.initialize(rd, shader_rid, self)
 	mesh_instances.append(caster)
 	
+func _unregister_shadow_caster(caster: ShadowMesh):
+	mesh_instances.erase(caster)
 	
 func get_fixed_view_transform(xform : Transform3D) -> Transform3D:
 	xform.basis = xform.basis.orthonormalized()
