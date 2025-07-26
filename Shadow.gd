@@ -17,10 +17,12 @@ var view : Projection
 			shadow_tier.orthographic = value
 			shadow_tier._update_projection()
 
-#@export var rect_path: NodePath
+@export var rect_path: NodePath
 @export var camera_path: NodePath
 
 var mesh_instances: Array[ShadowMesh] = []
+var mesh_instances_model_buffers : Array[RID] = []
+var mesh_instances_model_sets : Array[RID] = []
 
 @export var shadow_tier_count = 2
 @export var tier_settings: Array[ShadowTierSettings]
@@ -30,7 +32,9 @@ var shadow_tiers: Array[ShadowTier] = []
 @export var vertex_shader_path: String = "res://shadow_system/shaders/shadow_vert.spv"
 @export var fragment_shader_path: String = "res://shadow_system/shaders/shadow_frag.spv"
 
-#var rect: TextureRect
+@export var debug_position := false
+
+var rect: TextureRect
 
 
 func _ready() -> void:
@@ -59,36 +63,26 @@ func _ready() -> void:
 	
 	_run_pipeline()
 	
-	#rect = get_node(rect_path)
-	#rect.texture =  shadow_tiers[0].color_texture;
+	rect = get_node(rect_path)
+	rect.texture =  shadow_tiers[0].color_texture;
 	
-	get_tree().connect("node_added", Callable(self, "_on_node_added"))
+	#get_tree().connect("node_added", Callable(self, "_on_node_added"))
 	call_deferred("_register_existing_shadow_meshes")
 	call_deferred("_run", 0.0)
 
-	#print("Shadow, online.")	
 	
 	
 	
 func _process(delta: float) -> void:
+	look_at(Vector3(0,0,0))
+	
 	if Engine.is_editor_hint():
 		return
 	_run(delta)
 	
+	
 	view = Projection(get_fixed_view_transform(global_transform))
-	
-#var counter = 0
-#var first = true
-#func _physics_process(delta: float) -> void:
-	#counter += 1
-	#if counter == 120:
-		#if first:
-			#rect.texture =  shadow_tiers[0].color_texture;
-		#else:
-			#rect.texture =  shadow_tiers[1].color_texture;
-		#first = !first
-		#counter = 0
-	
+
 
 func get_tex():
 	if shadow_tiers.size() > 0:
@@ -100,44 +94,65 @@ func _run(delta: float):
 		
 	_run_pipeline()
 	
-	#RenderingServer.global_shader_parameter_set("light_pos", global_position)
+	if (debug_position): 
+		RenderingServer.global_shader_parameter_set("light_pos", global_position)
 
 
 func _run_pipeline():
 	for shadow_tier in shadow_tiers:
+		for i in range(mesh_instances.size()):
+			var mesh = mesh_instances[i] as ShadowMesh
+			if mesh.get_dirty():
+				_update_model_buffer(mesh.get_model_matrix(), i)
+				mesh.set_dirty(false)
 		var draw_list = rd.draw_list_begin(shadow_tier.fb_rid, RenderingDevice.DRAW_CLEAR_ALL, clear_colors, 1.0, 0, Rect2(), 0)
 		rd.draw_list_bind_render_pipeline(draw_list, pipeline)
 		rd.draw_list_bind_uniform_set(draw_list, shadow_tier.view_proj_uniform_set, 0)
 		for i in range(mesh_instances.size()):
-			var mesh = mesh_instances[i]
-			if mesh.visible == false: continue
+			var mesh = mesh_instances[i] as ShadowMesh
+			var model_set = mesh_instances_model_sets[i]
+			#if mesh.visible == false: continue
 			rd.draw_list_bind_vertex_array(draw_list, mesh.get_vertex_array_rid())
-
-			if mesh.has_index_array():
-				rd.draw_list_bind_index_array(draw_list, mesh.get_index_array_rid())
-				rd.draw_list_bind_uniform_set(draw_list, mesh.get_model_uniform_set(), 1)
-				rd.draw_list_draw(draw_list, true, 1)
-			else:
-				rd.draw_list_bind_uniform_set(draw_list, mesh.get_model_uniform_set(), 1)
-				rd.draw_list_draw(draw_list, false, 1)  # false = non-indexed draw
+			rd.draw_list_bind_index_array(draw_list, mesh.get_index_array_rid())
+			rd.draw_list_bind_uniform_set(draw_list, model_set, 1)
+			rd.draw_list_draw(draw_list, true, 1)
+			#else:
+				#rd.draw_list_bind_uniform_set(draw_list, mesh.get_model_uniform_set(), 1)
+				#rd.draw_list_draw(draw_list, false, 1)  # false = non-indexed draw
+			
 		rd.draw_list_end()
 	
 func _register_existing_shadow_meshes():
 	for node in get_tree().get_nodes_in_group("shadow_meshes"):
-		_register_shadow_caster(node)
+		if node is ShadowMesh:
+			_register_shadow_caster(node)
 
 
 func _on_node_added(node: Node):
 	if node is ShadowMesh:
 		_register_shadow_caster(node)
 
-
-func _register_shadow_caster(caster: ShadowMesh):
-	caster.initialize(rd, shader_rid, self)
-	mesh_instances.append(caster)
 	
-func _unregister_shadow_caster(caster: ShadowMesh):
+func _register_shadow_caster(caster : ShadowMesh):
+	mesh_instances.append(caster)
+	_create_model_buffer(caster.get_model_matrix()) 
+	
+func _unregister_shadow_caster(caster: ShadowMesh2):
 	mesh_instances.erase(caster)
+	
+func _create_model_buffer(byte_array : PackedByteArray):
+	print("adding to array")
+	var model_buffer = rd.uniform_buffer_create(byte_array.size(), byte_array)
+	mesh_instances_model_buffers.append(model_buffer)
+	var model_uniform = RDUniform.new()
+	model_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
+	model_uniform.binding = 1
+	model_uniform.add_id(model_buffer)
+	
+	mesh_instances_model_sets.append(rd.uniform_set_create([model_uniform], shader_rid, 1))
+
+func _update_model_buffer(byte_array : PackedByteArray, index : int):
+	rd.buffer_update(mesh_instances_model_buffers[index], 0, byte_array.size(), byte_array)
 	
 func get_fixed_view_transform(xform : Transform3D) -> Transform3D:
 	xform.basis = xform.basis.orthonormalized()
@@ -169,6 +184,8 @@ func _load_shader():
 var color_format : RDTextureFormat
 var depth_format : RDTextureFormat
 var fb_format : int
+
+
 
 func _create_formats():
 	color_format = RDTextureFormat.new()
@@ -209,7 +226,6 @@ func _setup_pipeline():
 	depth.enable_depth_test = true
 	depth.enable_depth_write = true
 	depth.depth_compare_operator = RenderingDevice.COMPARE_OP_LESS
-	#depth.depth_compare_operator = RenderingDevice.COMPARE_OP_GREATER
 
 	var msaa = RDPipelineMultisampleState.new()
 	var blend = RDPipelineColorBlendState.new()
@@ -233,5 +249,4 @@ func flatten_projection_column_major(p: Projection) -> PackedFloat32Array:
 	
 func _exit_tree():
 	rd.free_rid(pipeline)
-	#rect.texture = null
 	mesh_instances.clear()

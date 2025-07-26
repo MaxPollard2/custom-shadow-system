@@ -1,8 +1,8 @@
 @tool
 extends Node
-class_name ShadowMesh
+class_name ShadowMesh2
 
-signal shadow_caster_ready(caster: ShadowMesh)
+signal shadow_caster_ready(caster: ShadowMesh2)
 
 var rd: RenderingDevice
 var mesh: Mesh
@@ -18,6 +18,8 @@ var last_global_transform: Transform3D
 var shadow : Shadow
 
 var visible := true
+
+var shadowww : ShadowMesh
 
 func _ready():
 	add_to_group("shadow_meshes")
@@ -36,6 +38,10 @@ func _process(_delta: float) -> void:
 		last_global_transform = current_transform
 		if rd:
 			update_model_matrix()
+	if shadowww:
+		shadowww.global_transform = current_transform
+	#if shadowww:
+		#shadowww.update_model_matrix()
 
 func initialize(rd_: RenderingDevice, shader_rid_: RID, _shadow):
 	if !mesh:

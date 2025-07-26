@@ -1,0 +1,18 @@
+{
+    "configurations": [
+        {
+            "name": "Linux/Windows/Whatever",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/Users/maxpo/Documents/GodotProjects/godot-cpp/include",
+                "C:/Users/maxpo/Documents/GodotProjects/godot-cpp/gen/include",
+                "C:/Users/maxpo/Documents/GodotProjects/godot-cpp/include/godot_cpp"
+            ],
+            "defines": [
+                "GDEXTENSION"
+            ],
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}

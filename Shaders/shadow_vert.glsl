@@ -13,4 +13,5 @@ layout(set = 1, binding = 1) uniform Model {
 void main() {
     //int idx = gl_VertexIndex;
     gl_Position = view_proj * model * vec4(a_position, 1.0);// * vec4(1.0, 1.0, -1.0, 1.0);
+
 }
