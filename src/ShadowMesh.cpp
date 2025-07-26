@@ -22,6 +22,7 @@ void ShadowMesh::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_model_matrix"), &ShadowMesh::get_model_matrix);
     ClassDB::bind_method(D_METHOD("get_dirty"), &ShadowMesh::get_dirty);
     ClassDB::bind_method(D_METHOD("set_dirty", "bool value"), &ShadowMesh::set_dirty);
+    ClassDB::bind_method(D_METHOD("is_indexed"), &ShadowMesh::is_indexed);
 
 
     ClassDB::bind_method(D_METHOD("set_mesh_path", "path"), &ShadowMesh::set_mesh_path);

@@ -28,7 +28,7 @@ private:
 
     bool visible = true;
     bool dirty_transform = false;
-    bool indexed;
+    bool indexed = false;
 
     Vector<RID> rids;
 
@@ -60,6 +60,7 @@ public:
     PackedByteArray get_model_matrix() const { return model_matrix; }
     NodePath get_mesh_path() const { return mesh_path; }
     void set_mesh_path(const NodePath &p_path);
+    bool is_indexed() const { return indexed; }
 
 protected:
 
