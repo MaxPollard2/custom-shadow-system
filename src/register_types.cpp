@@ -1,6 +1,7 @@
 #include "register_types.h"
 
 #include "ShadowMesh.h"
+#include "ShadowHelper.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -13,6 +14,7 @@ void initialize_example_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 	ClassDB::register_class<ShadowMesh>();
+	ClassDB::register_class<ShadowHelper>();
 	//GDREGISTER_RUNTIME_CLASS(ShadowMesh);
 }
 

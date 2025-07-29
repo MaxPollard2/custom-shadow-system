@@ -34,6 +34,8 @@ private:
 
     PackedByteArray model_matrix;
 
+    AABB aabb;
+
 protected:
     static void _bind_methods();
 
@@ -60,7 +62,14 @@ public:
     PackedByteArray get_model_matrix() const { return model_matrix; }
     NodePath get_mesh_path() const { return mesh_path; }
     void set_mesh_path(const NodePath &p_path);
+
     bool is_indexed() const { return indexed; }
+
+    void set_visible(bool v) { visible = v; }
+    bool is_visible() const { return visible; }
+
+    void set_aabb(AABB _aabb) { aabb = _aabb; }
+    AABB get_aabb() const { return aabb; }
 
 protected:
 

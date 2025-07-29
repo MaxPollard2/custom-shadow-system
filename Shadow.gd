@@ -17,7 +17,7 @@ var view : Projection
 			shadow_tier.orthographic = value
 			shadow_tier._update_projection()
 
-@export var rect_path: NodePath
+#@export var rect_path: NodePath
 @export var camera_path: NodePath
 
 var mesh_instances: Array[ShadowMesh] = []
@@ -34,11 +34,15 @@ var shadow_tiers: Array[ShadowTier] = []
 
 @export var debug_position := false
 
-var rect: TextureRect
+#var rect: TextureRect
 
+var custom_aabb : AABB
 
 func _ready() -> void:
+	custom_aabb = AABB(Vector3(-1000, -1000, -1000), Vector3(2000, 2000, 2000))
 	rd = RenderingServer.get_rendering_device()
+	
+	RenderingServer.frame_pre_draw.connect(_on_frame_pre_draw)
 	
 	var view = Projection(get_fixed_view_transform(global_transform))
 
@@ -55,43 +59,34 @@ func _ready() -> void:
 			shadow_tiers[i].global_uniform_texture_name = tier_settings[i].global_uniform_texture_name
 			shadow_tiers[i].global_uniform_mat4_name = tier_settings[i].global_uniform_mat4_name
 			shadow_tiers[i].global_uniform_size_name = tier_settings[i].global_uniform_size_name
-		shadow_tiers[i]._setup()
-		#shadow_tier._init(self, rd)
-	
+		shadow_tiers[i]._setup()	
 	
 	_setup_pipeline()
-	
 	_run_pipeline()
-	
-	rect = get_node(rect_path)
-	rect.texture =  shadow_tiers[0].color_texture;
-	
-	#get_tree().connect("node_added", Callable(self, "_on_node_added"))
-	call_deferred("_register_existing_shadow_meshes")
-	call_deferred("_run", 0.0)
 
+	call_deferred("_register_existing_shadow_meshes")
+	call_deferred("_run")
+	
+	var shadow_aabb = shadow_tiers[0].aabb
+	#draw_aabb_wireframe(shadow_aabb, self, Color.WHITE)
 	
 	
-	
-func _process(delta: float) -> void:
-	look_at(Vector3(0,0,0))
-	
-	if Engine.is_editor_hint():
-		return
-	_run(delta)
-	
+func _on_frame_pre_draw() -> void:
+	if Engine.is_editor_hint(): return
 	
 	view = Projection(get_fixed_view_transform(global_transform))
-
+	
+	_run()
+	
 
 func get_tex():
 	if shadow_tiers.size() > 0:
 		return shadow_tiers[0].color_texture
 
-func _run(delta: float):
+func _run():
 	for shadow_tier in shadow_tiers:
 		shadow_tier._update_buffer()
-		
+	var shadow_aabb = shadow_tiers[0].aabb * global_transform
 	_run_pipeline()
 	
 	if (debug_position): 
@@ -100,6 +95,8 @@ func _run(delta: float):
 
 func _run_pipeline():
 	for shadow_tier in shadow_tiers:
+		var shadow_world_aabb = shadow_tier._rebuild_light_local_aabb2()
+
 		for i in range(mesh_instances.size()):
 			var mesh = mesh_instances[i] as ShadowMesh
 			if mesh.get_dirty():
@@ -108,25 +105,35 @@ func _run_pipeline():
 		var draw_list = rd.draw_list_begin(shadow_tier.fb_rid, RenderingDevice.DRAW_CLEAR_ALL, clear_colors, 1.0, 0, Rect2(), 0)
 		rd.draw_list_bind_render_pipeline(draw_list, pipeline)
 		rd.draw_list_bind_uniform_set(draw_list, shadow_tier.view_proj_uniform_set, 0)
+		var counter = 0;
 		for i in range(mesh_instances.size()):
 			var mesh = mesh_instances[i] as ShadowMesh
-			var model_set = mesh_instances_model_sets[i]
-			#if mesh.visible == false: continue
-			rd.draw_list_bind_vertex_array(draw_list, mesh.get_vertex_array_rid())
-			rd.draw_list_bind_index_array(draw_list, mesh.get_index_array_rid())
-			rd.draw_list_bind_uniform_set(draw_list, model_set, 1)
-			rd.draw_list_draw(draw_list, true, 1)
-			#else:
-				#rd.draw_list_bind_uniform_set(draw_list, mesh.get_model_uniform_set(), 1)
-				#rd.draw_list_draw(draw_list, false, 1)  # false = non-indexed draw
+			if !mesh.is_visible(): continue
+			
+			var world_aabb = mesh.get_aabb() * mesh.global_transform
+			if(shadow_world_aabb.intersects(world_aabb)):# || shadow_world_aabb.encloses(world_aabb)):
+				var model_set = mesh_instances_model_sets[i]
+				
+				if mesh.is_indexed():
+					rd.draw_list_bind_vertex_array(draw_list, mesh.get_vertex_array_rid())
+					rd.draw_list_bind_index_array(draw_list, mesh.get_index_array_rid())
+					rd.draw_list_bind_uniform_set(draw_list, model_set, 1)
+					rd.draw_list_draw(draw_list, true, 1)
+				else:
+					rd.draw_list_bind_vertex_array(draw_list, mesh.get_vertex_array_rid())
+					rd.draw_list_bind_uniform_set(draw_list, model_set, 1)
+					rd.draw_list_draw(draw_list, false, 1)  # false = non-indexed draw
+			else:
+				counter += 1;
+		#print(counter, " skipped due to AABB")
 			
 		rd.draw_list_end()
-	
+
+
 func _register_existing_shadow_meshes():
 	for node in get_tree().get_nodes_in_group("shadow_meshes"):
 		if node is ShadowMesh:
 			_register_shadow_caster(node)
-
 
 func _on_node_added(node: Node):
 	if node is ShadowMesh:
@@ -137,11 +144,10 @@ func _register_shadow_caster(caster : ShadowMesh):
 	mesh_instances.append(caster)
 	_create_model_buffer(caster.get_model_matrix()) 
 	
-func _unregister_shadow_caster(caster: ShadowMesh2):
+func _unregister_shadow_caster(caster: ShadowMesh):
 	mesh_instances.erase(caster)
 	
 func _create_model_buffer(byte_array : PackedByteArray):
-	print("adding to array")
 	var model_buffer = rd.uniform_buffer_create(byte_array.size(), byte_array)
 	mesh_instances_model_buffers.append(model_buffer)
 	var model_uniform = RDUniform.new()

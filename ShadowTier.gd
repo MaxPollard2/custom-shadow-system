@@ -11,6 +11,8 @@ var projection : Projection
 var view_proj : Projection
 var cached_view_proj : PackedByteArray
 
+var local_aabb := AABB()
+
 var view_proj_uniform_buffer: RID
 var view_proj_uniform_set: RID
 
@@ -22,6 +24,8 @@ var fb_rid: RID
 var global_uniform_texture_name : String = ""
 var global_uniform_mat4_name : String = ""
 var global_uniform_size_name : String = ""
+
+var aabb : AABB
 
 @export var orthographic := false:
 	set(value):
@@ -52,6 +56,8 @@ func _init(_shadow, _rd):
 	shadow = _shadow
 	orthographic = shadow.orthographic
 	rd = _rd
+	
+	_rebuild_light_local_aabb()
 		
 func _update_projection():
 	if orthographic:
@@ -62,6 +68,43 @@ func _update_projection():
 	var view = shadow.view
 	view_proj = projection * view
 	cached_view_proj = flatten_projection_column_major(view_proj).to_byte_array()
+	
+	_rebuild_light_local_aabb()
+		
+func _rebuild_light_local_aabb() -> void:
+	var half := size * 0.5
+	var length = far
+
+	aabb = AABB(Vector3(-half, -half, near), Vector3(size, size, far))
+
+
+####################################### This one was "working"	
+func _rebuild_light_local_aabb2() -> AABB:
+	var forward = -shadow.global_basis.z
+	var up = shadow.global_basis.y
+	var right = shadow.global_basis.x
+	
+	var pos = shadow.global_position
+	
+	var corners = [
+		pos + (up * size) + (right * size),
+		pos + (up * size) - (right * size),
+		pos - (up * size) + (right * size),
+		pos - (up * size) - (right * size),
+		
+		
+		pos + (up * size) + (right * size) + (forward * far),
+		pos + (up * size) - (right * size) + (forward * far),
+		pos - (up * size) + (right * size) + (forward * far),
+		pos - (up * size) - (right * size) + (forward * far),
+	]
+	
+	var world_aabb = AABB(corners[0], Vector3.ZERO)
+	for i in range(1, corners.size()):
+		world_aabb = world_aabb.expand(corners[i])
+#
+	return world_aabb
+
 	
 func _update_buffer():
 	view_proj = projection * shadow.view
@@ -157,13 +200,10 @@ func make_perspective_projection() -> Projection:
 	
 func get_fixed_view_transform(xform : Transform3D) -> Transform3D:
 	xform.basis = xform.basis.orthonormalized()
-
-	#if xform.basis.determinant() < 0:
-	#	xform.basis.x = -xform.basis.x
-
 	xform.basis.z = -xform.basis.z
 
 	return xform.affine_inverse()
+	
 	
 func flatten_projection_column_major(p: Projection) -> PackedFloat32Array:
 	var arr := PackedFloat32Array()
