@@ -3,7 +3,7 @@ extends Node
 class_name ShadowTier
 
 var color_texture: Texture2DRD
-var depth_tex_rid: RID
+#var depth_tex_rid: RID
 
 var resolution = Vector2(2048, 2048)
 
@@ -73,7 +73,7 @@ func _update_projection():
 		
 func _rebuild_light_local_aabb() -> void:
 	var half := size * 0.5
-	var length = far
+	#var length = far
 
 	aabb = AABB(Vector3(-half, -half, near), Vector3(size, size, far))
 
@@ -120,7 +120,7 @@ func _setup():
 	_update_projection()
 	
 	var view = shadow.view
-	var view_proj = projection * view
+	view_proj = projection * view
 	cached_view_proj = flatten_projection_column_major(view_proj).to_byte_array()
 	
 	var view_proj_matrix = cached_view_proj

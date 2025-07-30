@@ -59,7 +59,11 @@ public:
     bool has_index_array() const { return indexed; }
     bool get_dirty() const { return dirty_transform; }
     void set_dirty(bool value) { dirty_transform = value; }
+
+
     PackedByteArray get_model_matrix() const { return model_matrix; }
+    inline const uint8_t* get_model_matrix_ptr() const { return model_matrix.ptr(); }
+
     NodePath get_mesh_path() const { return mesh_path; }
     void set_mesh_path(const NodePath &p_path);
 

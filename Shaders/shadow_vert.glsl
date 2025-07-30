@@ -6,12 +6,18 @@ layout(std140, set = 0, binding = 0) uniform TransformData {
     mat4 view_proj;
 };
 
-layout(set = 1, binding = 1) uniform Model {
-	mat4 model;
+layout(std430, set = 1, binding = 0) readonly buffer Models {
+    mat4 model[];
 };
+
+
+layout(push_constant) uniform Push {
+    uint model_index;
+} pc;
+
 
 void main() {
     //int idx = gl_VertexIndex;
-    gl_Position = view_proj * model * vec4(a_position, 1.0);// * vec4(1.0, 1.0, -1.0, 1.0);
-
+    mat4 M = model[pc.model_index];
+    gl_Position = view_proj * M * vec4(a_position, 1.0);
 }
