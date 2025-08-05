@@ -65,12 +65,9 @@ void fragment() {
 	    vec3 shadow_coord = light_space_pos.xyz / light_space_pos.w;
 	    vec2 uv = shadow_coord.xy * 0.5 + 0.5;
 
-		// m00 = 2 / (right - left) → right - left = 2 / m00
 		float world_width_casc1 = 2.0 / cascade_1_view_proj[0][0];
 		float texel_world_casc1 = (world_width_casc1 / RESOLUTION);
-		//float radius_casc1 = texel_world_casc1 * RADIUS_SCALE;
 
-		//uv = floor(uv * RESOLUTION) / RESOLUTION;
 		float _radius = 1.0 / (RESOLUTION * 2.0);
 //
 		float light_depth = cascade_1_range.z;
@@ -86,9 +83,7 @@ void fragment() {
 
 		float world_width_casc2 = 2.0 / cascade_2_view_proj[0][0];
 		float texel_world_casc2 = (world_width_casc2 / RESOLUTION);
-		//float radius_casc2 = texel_world_casc2 * RADIUS_SCALE;
 
-		//uv = floor(uv * RESOLUTION) / RESOLUTION;
 		float _radius = 1.0 / (RESOLUTION * 2.0);
 
 		float light_depth = cascade_2_range.z;

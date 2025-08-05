@@ -50,6 +50,8 @@ public:
 
     void update_from_mesh(MeshInstance3D *mesh_instance);
 
+    void update_vertex_buffer_from_array(const PackedVector3Array &vertex_array);
+
     void update_model_matrix();
 
     void _exit_tree();

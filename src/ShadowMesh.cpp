@@ -15,6 +15,7 @@ void ShadowMesh::_bind_methods() {
     ClassDB::bind_method(D_METHOD("generate_from_mesh", "mesh_instance_3d"), &ShadowMesh::generate_from_mesh);
     ClassDB::bind_method(D_METHOD("update_from_mesh", "mesh_instance_3d"), &ShadowMesh::update_from_mesh);
     ClassDB::bind_method(D_METHOD("update_model_matrix"), &ShadowMesh::update_model_matrix);
+    ClassDB::bind_method(D_METHOD("update_vertex_buffer_from_array", "PackedVector3Array"), &ShadowMesh::update_vertex_buffer_from_array);
 
     // Accessors
     ClassDB::bind_method(D_METHOD("get_vertex_array_rid"), &ShadowMesh::get_vertex_array_rid);
@@ -145,6 +146,11 @@ void godot::ShadowMesh::update_from_mesh(MeshInstance3D *mesh_instance)
 
     set_global_transform(mesh_instance->get_global_transform());
     set_dirty(true);
+}
+
+void godot::ShadowMesh::update_vertex_buffer_from_array(const PackedVector3Array &vertex_array)
+{
+    rd->buffer_update(vertex_buffer, 0, vertex_array.size() * 12, vertex_array.to_byte_array());
 }
 
 

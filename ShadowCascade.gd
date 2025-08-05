@@ -37,7 +37,6 @@ func _init(_rd : RenderingDevice, _shadow : Shadow, _camera : Camera3D, _near : 
 	far = _far
 	
 	glob_tex_name = _glob_tex_name
-	print(_glob_mat_name)
 	glob_mat_name = _glob_mat_name
 	glob_range_name = _glob_range_name
 	
@@ -59,16 +58,16 @@ func _setup_buffers() -> void:
 	
 func _create_cascade():
 	#https://alextardif.com/shadowmapping.html
-	var corners = get_frustum_corners(camera, near, far);
+	var corners = get_frustum_corners(camera, near, far * 1.0);
 	var world_center := Vector3.ZERO
 	for c in corners:
 		world_center += c;
 	world_center /= 8
 		
-	var light_origin = world_center + (shadow.basis.z.normalized() * 50000)
+	var light_origin = world_center + (shadow.basis.z.normalized() * 250000)
 	var cascade_transform := Transform3D(shadow.basis, light_origin).affine_inverse()
 	
-	var radius : float = (corners[0] - corners[6]).length() * 0.5 #top left to bottom right
+	var radius : float = (world_center - corners[6]).length()#(corners[0] - corners[6]).length() * 0.5 #top left to bottom right
 	var texelsPerUnit = (resolution.x / (radius * 2.0));
 	
 	var l = cascade_transform * world_center
@@ -112,15 +111,6 @@ func _create_cascade():
 	
 	rd.buffer_update(view_proj_uniform_buffer, 0, cached_view_proj.size(), cached_view_proj)
 	
-
-func _update_projection():
-	#projection = make_orthographic_projection()
-	#view = shadow.get_fixed_view_transform(shadow.global_transform)
-	var view = Projection(shadow.get_fixed_view_transform(shadow.global_transform))
-	view_proj = projection * view
-	cached_view_proj = flatten_projection_column_major(view_proj).to_byte_array()
-	
-	#_rebuild_light_local_aabb()
 
 func make_ortho_from_bounds(left, right, bottom, top, near, far) -> Projection:
 	var rl = right - left

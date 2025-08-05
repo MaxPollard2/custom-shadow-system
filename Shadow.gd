@@ -12,22 +12,10 @@ var view : Projection
 
 var shadow_helper : ShadowHelper
 
-@export var orthographic := false:
-	set(value):
-		orthographic = value
-		for shadow_tier in shadow_tiers:
-			shadow_tier.orthographic = value
-			shadow_tier._update_projection()
-
-@export var rect_path: NodePath
 @export var camera_path: NodePath
 
 var mesh_instances: Array[ShadowMesh] = []
 
-@export var shadow_tier_count = 2
-@export var tier_settings: Array[ShadowTierSettings]
-
-var shadow_tiers: Array[ShadowTier] = []
 var shadow_cascades: Array[ShadowCascade] = []
 
 @export var vertex_shader_path: String = "res://shadow_system/shaders/shadow_vert.spv"
@@ -38,10 +26,14 @@ var shadow_cascades: Array[ShadowCascade] = []
 var rect: TextureRect
 var camera: Camera3D
 
-var custom_aabb : AABB
 
 func _ready() -> void:
-	custom_aabb = AABB(Vector3(-1000, -1000, -1000), Vector3(2000, 2000, 2000))
+	camera = get_viewport().get_camera_3d()
+	while camera == null:
+		await get_tree().process_frame
+		camera = get_viewport().get_camera_3d()
+	
+	
 	rd = RenderingServer.get_rendering_device()
 	
 	RenderingServer.frame_pre_draw.connect(_on_frame_pre_draw)
@@ -51,47 +43,20 @@ func _ready() -> void:
 	_load_shader()
 	_create_formats()
 
-	for i in shadow_tier_count:
-		shadow_tiers.append(ShadowTier.new(self, rd))
-		if (i < tier_settings.size()):
-			shadow_tiers[i].resolution = tier_settings[i].resolution
-			shadow_tiers[i].far = tier_settings[i].far
-			shadow_tiers[i].near = tier_settings[i].near
-			shadow_tiers[i].size = tier_settings[i].size
-			shadow_tiers[i].global_uniform_texture_name = tier_settings[i].global_uniform_texture_name
-			shadow_tiers[i].global_uniform_mat4_name = tier_settings[i].global_uniform_mat4_name
-			shadow_tiers[i].global_uniform_size_name = tier_settings[i].global_uniform_size_name
-		shadow_tiers[i]._setup()	
-	
 	_setup_pipeline()
 	
 	shadow_helper = ShadowHelper.new()
 	shadow_helper.init(rd, pipeline, shader_rid)
 
 	call_deferred("_register_existing_shadow_meshes")
-	call_deferred("_run")
 	
-	var shadow_aabb = shadow_tiers[0].aabb
-	
-	rect = get_node(rect_path)
-	camera = get_node(camera_path)
+	camera = get_viewport().get_camera_3d()
 	
 	if(camera):
 		_create_cascades()
-		
-	rect.texture = shadow_cascades[0].color_texture
-	#draw_aabb_wireframe(shadow_aabb, self, Color.WHITE)
+	else: print("no camera")
 
-var counter = 0;
-func _physics_process(delta: float) -> void:
-	counter += 1
-	if counter == 300:
-		rect.texture = shadow_cascades[0].color_texture
-	if counter == 600:
-		rect.texture = shadow_cascades[0].color_texture
-		counter = 0
-
-func _create_cascades(split_count: int = 4, lambda: float = 0.99985) -> void:
+func _create_cascades(split_count: int = 5, lambda: float = 0.99975) -> void:
 	var near = camera.near
 	var far = camera.far
 	shadow_cascades.clear()
@@ -99,21 +64,27 @@ func _create_cascades(split_count: int = 4, lambda: float = 0.99985) -> void:
 	for i in range(split_count):
 		var p = float(i + 1) / float(split_count)
 
-		# Linear split
 		var linear_split = near + (far - near) * p
-		# Logarithmic split
 		var log_split = near * pow(far / near, p)
-		# Practical split (blend)
 		
 		var split_dist = lerp(linear_split, log_split, lambda)
 
 		var split_start =  near if (i == 0) else shadow_cascades[i - 1].end
 		var split_end = split_dist
+		
+		print("cascade ", i, " : ", split_start, " ", split_end)
+		
 		var cascade
 		if (i == 0):
 			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_1_map", "cascade_1_view_proj", "cascade_1_range")
 		elif (i == 1):
 			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_2_map", "cascade_2_view_proj", "cascade_2_range")
+		elif (i == 2):
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_3_map", "cascade_3_view_proj", "cascade_3_range")
+		elif (i == 3):
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_4_map", "cascade_4_view_proj", "cascade_4_range")
+		elif (i == 4):
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_5_map", "cascade_5_view_proj", "cascade_5_range")
 		else:
 			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end)
 		add_child(cascade)
@@ -126,29 +97,8 @@ func _on_frame_pre_draw() -> void:
 	if Engine.is_editor_hint(): return
 	
 	view = Projection(get_fixed_view_transform(global_transform))
-	
-	_run()
-	
 
-func _run():
-	#for shadow_tier in shadow_tiers:
-		#shadow_tier._update_buffer()
-	
-	#for cascade in shadow_cascades:
-		#cascade._create_cascade()
-	
 	shadow_helper.update_model_matrices(mesh_instances)
-	
-	_run_pipeline()
-	
-	if (debug_position): 
-		RenderingServer.global_shader_parameter_set("light_dir", global_basis.z)
-
-
-func _run_pipeline():
-	#var shadow_world_aabb = shadow_tiers[0]._rebuild_light_local_aabb2()
-	#for shadow_tier in shadow_tiers:
-		#shadow_helper.run_cascade(shadow_tier.fb_rid, shadow_tier.view_proj_uniform_set, mesh_instances, shadow_world_aabb)
 	
 	for i in shadow_cascades.size():
 		shadow_cascades[i]._create_cascade()
@@ -234,6 +184,7 @@ func _setup_pipeline():
 	vertex_attr.offset = 0
 	vertex_attr.stride = 12
 	vertex_attr.location = 0
+	vertex_attr.frequency
 
 	var vertex_format = rd.vertex_format_create([vertex_attr])
 
