@@ -35,6 +35,8 @@ public:
 
     void run_cascade(RID fb, RID vp_set0, const Array &meshes, const AABB &cascade_world_aabb);
 
+    void run_cascade_no_aabb(RID fb, RID vp_set0, const Array &meshes);
+
 protected:
     static void _bind_methods();
 

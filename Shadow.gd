@@ -19,7 +19,7 @@ var shadow_helper : ShadowHelper
 			shadow_tier.orthographic = value
 			shadow_tier._update_projection()
 
-#@export var rect_path: NodePath
+@export var rect_path: NodePath
 @export var camera_path: NodePath
 
 var mesh_instances: Array[ShadowMesh] = []
@@ -28,13 +28,15 @@ var mesh_instances: Array[ShadowMesh] = []
 @export var tier_settings: Array[ShadowTierSettings]
 
 var shadow_tiers: Array[ShadowTier] = []
+var shadow_cascades: Array[ShadowCascade] = []
 
 @export var vertex_shader_path: String = "res://shadow_system/shaders/shadow_vert.spv"
 @export var fragment_shader_path: String = "res://shadow_system/shaders/shadow_frag.spv"
 
 @export var debug_position := false
 
-#var rect: TextureRect
+var rect: TextureRect
+var camera: Camera3D
 
 var custom_aabb : AABB
 
@@ -65,17 +67,60 @@ func _ready() -> void:
 	
 	shadow_helper = ShadowHelper.new()
 	shadow_helper.init(rd, pipeline, shader_rid)
-	
-	_run_pipeline()
 
 	call_deferred("_register_existing_shadow_meshes")
 	call_deferred("_run")
 	
 	var shadow_aabb = shadow_tiers[0].aabb
 	
-
-	#draw_aabb_wireframe(shadow_aabb, self, Color.WHITE)
+	rect = get_node(rect_path)
+	camera = get_node(camera_path)
 	
+	if(camera):
+		_create_cascades()
+		
+	rect.texture = shadow_cascades[0].color_texture
+	#draw_aabb_wireframe(shadow_aabb, self, Color.WHITE)
+
+var counter = 0;
+func _physics_process(delta: float) -> void:
+	counter += 1
+	if counter == 300:
+		rect.texture = shadow_cascades[0].color_texture
+	if counter == 600:
+		rect.texture = shadow_cascades[0].color_texture
+		counter = 0
+
+func _create_cascades(split_count: int = 4, lambda: float = 0.99985) -> void:
+	var near = camera.near
+	var far = camera.far
+	shadow_cascades.clear()
+	
+	for i in range(split_count):
+		var p = float(i + 1) / float(split_count)
+
+		# Linear split
+		var linear_split = near + (far - near) * p
+		# Logarithmic split
+		var log_split = near * pow(far / near, p)
+		# Practical split (blend)
+		
+		var split_dist = lerp(linear_split, log_split, lambda)
+
+		var split_start =  near if (i == 0) else shadow_cascades[i - 1].end
+		var split_end = split_dist
+		var cascade
+		if (i == 0):
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_1_map", "cascade_1_view_proj", "cascade_1_range")
+		elif (i == 1):
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_2_map", "cascade_2_view_proj", "cascade_2_range")
+		else:
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end)
+		add_child(cascade)
+		cascade._create_cascade()
+		cascade.start = split_start
+		cascade.end = split_end
+		shadow_cascades.append(cascade)
 	
 func _on_frame_pre_draw() -> void:
 	if Engine.is_editor_hint(): return
@@ -85,28 +130,29 @@ func _on_frame_pre_draw() -> void:
 	_run()
 	
 
-func get_tex():
-	if shadow_tiers.size() > 0:
-		return shadow_tiers[0].color_texture
-
 func _run():
-	for shadow_tier in shadow_tiers:
-		shadow_tier._update_buffer()
+	#for shadow_tier in shadow_tiers:
+		#shadow_tier._update_buffer()
+	
+	#for cascade in shadow_cascades:
+		#cascade._create_cascade()
 	
 	shadow_helper.update_model_matrices(mesh_instances)
-		
 	
 	_run_pipeline()
 	
 	if (debug_position): 
-		RenderingServer.global_shader_parameter_set("light_pos", global_position)
+		RenderingServer.global_shader_parameter_set("light_dir", global_basis.z)
 
 
 func _run_pipeline():
-	for shadow_tier in shadow_tiers:
-		var shadow_world_aabb = shadow_tier._rebuild_light_local_aabb2()
-		
-		shadow_helper.run_cascade(shadow_tier.fb_rid, shadow_tier.view_proj_uniform_set, mesh_instances, shadow_world_aabb)
+	#var shadow_world_aabb = shadow_tiers[0]._rebuild_light_local_aabb2()
+	#for shadow_tier in shadow_tiers:
+		#shadow_helper.run_cascade(shadow_tier.fb_rid, shadow_tier.view_proj_uniform_set, mesh_instances, shadow_world_aabb)
+	
+	for i in shadow_cascades.size():
+		shadow_cascades[i]._create_cascade()
+		shadow_helper.run_cascade_no_aabb(shadow_cascades[i].fb_rid, shadow_cascades[i].view_proj_uniform_set, mesh_instances)
 
 
 func _register_existing_shadow_meshes():
@@ -220,5 +266,4 @@ func flatten_projection_column_major(p: Projection) -> PackedFloat32Array:
 
 	
 func _exit_tree():
-	rd.free_rid(pipeline)
-	mesh_instances.clear()
+	if pipeline.is_valid(): rd.free_rid(pipeline)

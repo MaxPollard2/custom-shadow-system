@@ -9,6 +9,7 @@
 
 using namespace godot;
 
+
 void ShadowMesh::_bind_methods() {
     // Core methods
     ClassDB::bind_method(D_METHOD("generate_from_mesh", "mesh_instance_3d"), &ShadowMesh::generate_from_mesh);
@@ -37,9 +38,11 @@ void ShadowMesh::_bind_methods() {
 
 }
 
+
 ShadowMesh::ShadowMesh() 
 {
 }
+
 
 void ShadowMesh::_notification(int p_what)
 {
@@ -58,6 +61,7 @@ void ShadowMesh::_notification(int p_what)
         } break;
     }
 }
+
 
 void ShadowMesh::_ready() 
 {
@@ -78,14 +82,13 @@ void ShadowMesh::_ready()
             MeshInstance3D *mesh_instance = Object::cast_to<MeshInstance3D>(n);
             if (mesh_instance) {
                 generate_from_mesh(mesh_instance);
-                set_global_transform(mesh_instance->get_global_transform());
-                set_dirty(true);
+                
             }
         }
     }
-
     add_to_group("shadow_meshes");
 }
+
 
 void ShadowMesh::generate_from_mesh(MeshInstance3D *mesh_instance)
 {
@@ -120,7 +123,11 @@ void ShadowMesh::generate_from_mesh(MeshInstance3D *mesh_instance)
         index_buffer = rd->index_buffer_create(index_array.size(), RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, index_array.to_byte_array());
         index_array_rid = rd->index_array_create(index_buffer, 0, index_array.size());
     }
+
+    set_global_transform(mesh_instance->get_global_transform());
+    set_dirty(true);
 }
+
 
 void godot::ShadowMesh::update_from_mesh(MeshInstance3D *mesh_instance)
 {
@@ -135,7 +142,11 @@ void godot::ShadowMesh::update_from_mesh(MeshInstance3D *mesh_instance)
     {
         rd->buffer_update(index_buffer, 0, index_array.size() * 4, index_array.to_byte_array());
     }
+
+    set_global_transform(mesh_instance->get_global_transform());
+    set_dirty(true);
 }
+
 
 void ShadowMesh::update_model_matrix()
 {
@@ -164,11 +175,10 @@ void ShadowMesh::set_mesh_path(const NodePath &p_path) {
 
 void ShadowMesh::_exit_tree() {
     if (rd) {
-        if (vertex_array_rid.is_valid())
-            if(vertex_buffer.is_valid()) rd->free_rid(vertex_buffer);
-            if(vertex_array_rid.is_valid()) rd->free_rid(vertex_array_rid);
-        if (index_array_rid.is_valid())
-            if(index_buffer.is_valid()) rd->free_rid(index_buffer);
-            if(index_array_rid.is_valid()) rd->free_rid(index_array_rid);
+        if(vertex_buffer.is_valid()) rd->free_rid(vertex_buffer);
+        if(vertex_array_rid.is_valid()) rd->free_rid(vertex_array_rid);
+        
+        if(index_buffer.is_valid()) rd->free_rid(index_buffer);
+        if(index_array_rid.is_valid()) rd->free_rid(index_array_rid);            
     }
 }
