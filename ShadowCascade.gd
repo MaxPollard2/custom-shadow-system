@@ -65,7 +65,7 @@ func _create_cascade():
 	world_center /= 8
 		
 	var light_origin = world_center + (shadow.basis.z.normalized() * 250000)
-	var cascade_transform := Transform3D(shadow.basis, light_origin).affine_inverse()
+	var cascade_transform := Transform3D(shadow.basis.orthonormalized(), light_origin).affine_inverse()
 	
 	var radius : float = (world_center - corners[6]).length()#(corners[0] - corners[6]).length() * 0.5 #top left to bottom right
 	var texelsPerUnit = (resolution.x / (radius * 2.0));
@@ -179,11 +179,7 @@ func _create_render_target():
 	
 	color_texture.texture_rd_rid = color_tex_rid
 
-	var pass2 := RDFramebufferPass.new()
-	pass2.color_attachments = [0]
-	pass2.depth_attachment = 1
-
-	fb_rid = rd.framebuffer_create_multipass([color_tex_rid, depth_tex_rid], [pass2], shadow.fb_format)
+	fb_rid = rd.framebuffer_create([color_tex_rid, depth_tex_rid], shadow.fb_format)
 	
 	if (glob_tex_name != ""):
 		RenderingServer.global_shader_parameter_set(glob_tex_name, color_texture)
