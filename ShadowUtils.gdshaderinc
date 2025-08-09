@@ -18,6 +18,9 @@ global uniform sampler2D cascade_5_map;
 global uniform mat4 cascade_5_view_proj;
 global uniform vec3 cascade_5_range;
 
+global uniform mat4 cascade_6_view_proj;
+global uniform vec3 cascade_6_range;
+
 global uniform sampler2DArray cascade_maps;
 
 const float RESOLUTION = 4096.0;
@@ -120,6 +123,11 @@ float get_shadow(vec3 world_normal, vec3 light_dir, mat4 view_matrix, vec3 in_wo
 	{
 		shadow = get_shadow_from_cascade_2(in_world_position, slope, 4.0, cascade_5_view_proj, cascade_5_range.z);
 		debug_colour = vec3(0.0, 1.0, 1.0); // CYAN
+	}
+	else if (eye_depth < cascade_6_range.y)
+	{
+		shadow = get_shadow_from_cascade_2(in_world_position, slope, 5.0, cascade_6_view_proj, cascade_6_range.z);
+		debug_colour = vec3(1.0, 0.0, 1.0); // CYAN
 	}
 	else
 	{

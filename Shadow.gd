@@ -93,6 +93,8 @@ func _create_cascades(split_count: int = CASCADE_NUMBER, lambda: float = 0.99975
 			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_4_map", "cascade_4_view_proj", "cascade_4_range")
 		elif (i == 4):
 			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "cascade_5_map", "cascade_5_view_proj", "cascade_5_range")
+		elif (i == 5):
+			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end, "", "cascade_6_view_proj", "cascade_6_range")
 		else:
 			cascade = ShadowCascade.new(rd, self, camera, split_start, split_end)
 		add_child(cascade)
@@ -103,14 +105,11 @@ func _create_cascades(split_count: int = CASCADE_NUMBER, lambda: float = 0.99975
 	
 func _on_frame_pre_draw() -> void:
 	if Engine.is_editor_hint() || !shadow_helper: return
-	
-	#view = Projection(get_fixed_view_transform(global_transform))
 
 	_update_model_matrices()
 	
 	for i in shadow_cascades.size():
 		shadow_cascades[i]._create_cascade()
-		#shadow_helper.run_cascade_no_aabb(shadow_cascades[i].fb_rid, shadow_cascades[i].view_proj_uniform_set, mesh_instances)
 	
 	_update_view_proj_buffer()
 	_run_cascades_instanced()
@@ -119,7 +118,39 @@ func _update_model_matrices():
 	shadow_helper.update_model_matrices(mesh_instances)
 
 func _run_cascades_instanced():
-	shadow_helper.run_cascades_instanced(fb_rid, view_proj_uniform_set, mesh_instances, CASCADE_NUMBER)
+	var aabb_info := _create_aabb()
+	shadow_helper.run_cascades_instanced(fb_rid, view_proj_uniform_set, mesh_instances, CASCADE_NUMBER, aabb_info.transform, aabb_info.aabb)
+	
+func _create_aabb() -> Dictionary:
+	var corners = get_frustum_corners(camera, camera.near, camera.far);
+	var world_center := Vector3.ZERO
+	for c in corners:
+		world_center += c;
+	world_center /= 8
+		
+	var light_origin = world_center + (basis.z.normalized() * (250000))
+	var shadow_transform := Transform3D(basis.orthonormalized(), light_origin).affine_inverse()
+	
+	for i in corners.size():
+		corners[i] = shadow_transform * (corners[i])
+
+	var min_v = corners[0]
+	var max_v = corners[0]
+
+	for c in corners:
+		min_v = min_v.min(c)
+		max_v = max_v.max(c)
+		
+	#min_v.z *= -1
+	var aabb = AABB(min_v, abs(max_v - min_v))
+	
+	aabb.size.z *= 2;
+
+	return {
+		"transform": shadow_transform,
+		"aabb": aabb
+	}
+
 
 func _register_existing_shadow_meshes():
 	for node in get_tree().get_nodes_in_group("shadow_meshes"):
@@ -183,9 +214,7 @@ var texture_array : Texture2DArrayRD
 
 func _create_formats_new():
 	texture_format = RDTextureFormat.new()
-	#texture_format.format = RenderingDevice.DATA_FORMAT_R32G32_SFLOAT
 	texture_format.format = RenderingDevice.DATA_FORMAT_R32_SFLOAT
-	#texture_format.format = RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
 	texture_format.usage_bits = (
 		RenderingDevice.TEXTURE_USAGE_COLOR_ATTACHMENT_BIT |
 		RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT |
@@ -198,7 +227,7 @@ func _create_formats_new():
 	
 	depth_format_new = RDTextureFormat.new()
 	depth_format_new.format = RenderingDevice.DATA_FORMAT_D32_SFLOAT
-	depth_format_new.usage_bits = RenderingDevice.TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+	depth_format_new.usage_bits = (RenderingDevice.TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT)
 	depth_format_new.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	depth_format_new.array_layers = CASCADE_NUMBER
 	depth_format_new.width = RESOLUTION
@@ -305,8 +334,6 @@ func _setup_pipeline():
 
 	pipeline = rd.render_pipeline_create(shader_rid, fb_format, vertex_format, RenderingDevice.RENDER_PRIMITIVE_TRIANGLES, raster, msaa, depth, blend)
 	new_pipeline = rd.render_pipeline_create(new_shader_rid, fb_format2, vertex_format, RenderingDevice.RENDER_PRIMITIVE_TRIANGLES, raster, msaa, depth, blend)
-	
-	clear_colors = PackedColorArray([Color(1.0, 0, 0, 0.5), Color(0, 0, 0, 0.5), Color(0, 0, 0, 1)])
 
 
 func flatten_projection_column_major(p: Projection) -> PackedFloat32Array:
@@ -320,3 +347,38 @@ func flatten_projection_column_major(p: Projection) -> PackedFloat32Array:
 	
 func _exit_tree():
 	if pipeline.is_valid(): rd.free_rid(pipeline)
+
+
+func get_frustum_corners(camera: Camera3D, near: float, far: float) -> Array:
+	var corners = []
+
+	var fov = camera.fov
+	var aspect = get_viewport().get_visible_rect().size.aspect()
+	#var aspect = 1920.0 / 1080.0 #replace with viewport aspect ratio
+
+	var height_near = 2.0 * tan(deg_to_rad(fov) * 0.5) * near
+	var width_near = height_near * aspect
+	var height_far = 2.0 * tan(deg_to_rad(fov) * 0.5) * far
+	var width_far = height_far * aspect
+
+	var cam_transform = camera.global_transform
+	var forward = -cam_transform.basis.z
+	var right = cam_transform.basis.x
+	var up = cam_transform.basis.y
+
+	var near_center = cam_transform.origin + forward * near
+	var far_center = cam_transform.origin + forward * far
+
+	# Near plane
+	corners.append(near_center + up * (height_near * 0.5) - right * (width_near * 0.5)) # top left
+	corners.append(near_center + up * (height_near * 0.5) + right * (width_near * 0.5)) # top right
+	corners.append(near_center - up * (height_near * 0.5) - right * (width_near * 0.5)) # bottom left
+	corners.append(near_center - up * (height_near * 0.5) + right * (width_near * 0.5)) # bottom right
+
+	# Far plane
+	corners.append(far_center + up * (height_far * 0.5) - right * (width_far * 0.5)) # top left
+	corners.append(far_center + up * (height_far * 0.5) + right * (width_far * 0.5)) # top right
+	corners.append(far_center - up * (height_far * 0.5) - right * (width_far * 0.5)) # bottom left
+	corners.append(far_center - up * (height_far * 0.5) + right * (width_far * 0.5)) # bottom right
+
+	return corners

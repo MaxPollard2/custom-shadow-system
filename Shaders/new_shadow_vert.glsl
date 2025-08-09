@@ -20,7 +20,7 @@ layout(push_constant) uniform Push {
 
 
 void main() {
-    uint cascade_index = gl_InstanceIndex % NUM_CASCADES;
+    uint cascade_index = gl_InstanceIndex;
 
     mat4 VP = view_proj[cascade_index];
     //mat4 VP = view_proj[1];

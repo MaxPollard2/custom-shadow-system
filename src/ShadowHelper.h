@@ -38,7 +38,7 @@ public:
 
     void run_cascade_no_aabb(RID fb, RID vp_set0, const Array &meshes);
 
-    void run_cascades_instanced(RID fb, RID vp_set, const Array &meshes, int instance_count);
+    void run_cascades_instanced(RID fb, RID vp_set, const Array &meshes, int instance_count, Transform3D shadow_transform, AABB shadow_aabb);
 
 protected:
     static void _bind_methods();

@@ -5,7 +5,7 @@ void godot::ShadowHelper::_bind_methods() {
     ClassDB::bind_method(D_METHOD("run_cascade", "framebuffer", "view_proj_set", "mesh_array", "cascade aabb"), &ShadowHelper::run_cascade);
     ClassDB::bind_method(D_METHOD("update_model_matrices", "mesh_array"), &ShadowHelper::update_model_matrices);
     ClassDB::bind_method(D_METHOD("run_cascade_no_aabb", "framebuffer", "view_proj_set", "mesh_array"), &ShadowHelper::run_cascade_no_aabb);
-    ClassDB::bind_method(D_METHOD("run_cascades_instanced", "framebuffer", "view_proj_set", "mesh_array", "instance count"), &ShadowHelper::run_cascades_instanced);
+    ClassDB::bind_method(D_METHOD("run_cascades_instanced", "framebuffer", "view_proj_set", "mesh_array", "instance count", "shadow_transform", "shadow_AABB"), &ShadowHelper::run_cascades_instanced);
 }
 
 godot::ShadowHelper::ShadowHelper()
@@ -129,7 +129,7 @@ void godot::ShadowHelper::run_cascade_no_aabb(RID fb, RID vp_set0, const Array &
     rd->draw_list_end();
 }
 
-void godot::ShadowHelper::run_cascades_instanced(RID fb, RID vp_set, const Array &meshes, int instance_count) {
+void godot::ShadowHelper::run_cascades_instanced(RID fb, RID vp_set, const Array &meshes, int instance_count, Transform3D shadow_transform, AABB shadow_aabb) {
     if (!rd || !new_pipeline.is_valid()) return;
 
     int64_t draw_list = rd->draw_list_begin(fb, RenderingDevice::DRAW_CLEAR_ALL, clear_colors);
@@ -137,9 +137,26 @@ void godot::ShadowHelper::run_cascades_instanced(RID fb, RID vp_set, const Array
     rd->draw_list_bind_uniform_set(draw_list, vp_set, 0);
     rd->draw_list_bind_uniform_set(draw_list, matrices_set, 1); // models buffer
 
+    //int counter = 0;
+
     for (int i = 0; i < meshes.size(); i++) {
         ShadowMesh *m = Object::cast_to<ShadowMesh>(meshes[i]);
         if (!m || !m->is_visible()) continue;
+
+        //AABB local = m->get_aabb();
+        //AABB mesh_aabb_light = shadow_transform.xform(local);
+
+        AABB local_aabb = m->get_aabb();
+        Transform3D world_xf = m->get_global_transform();
+        AABB world_aabb = world_xf.xform(local_aabb);
+        AABB light_aabb = shadow_transform.xform(world_aabb);
+
+        
+        if (!shadow_aabb.intersects(light_aabb))
+        {
+            //counter++;
+            continue;
+        }
 
         push_constants.encode_u32(0, i);
         rd->draw_list_set_push_constant(draw_list, push_constants, 16);
@@ -153,6 +170,8 @@ void godot::ShadowHelper::run_cascades_instanced(RID fb, RID vp_set, const Array
 
         rd->draw_list_draw(draw_list, indexed, instance_count);
     }
+
+    //UtilityFunctions::print(counter, " ", (meshes.size() - counter));
 
     rd->draw_list_end();
 }

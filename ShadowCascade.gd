@@ -58,7 +58,7 @@ func _setup_buffers() -> void:
 	
 func _create_cascade():
 	#https://alextardif.com/shadowmapping.html
-	var corners = get_frustum_corners(camera, near, far * 1.0);
+	var corners = get_frustum_corners(near, far * 1.0);
 	var world_center := Vector3.ZERO
 	for c in corners:
 		world_center += c;
@@ -100,7 +100,7 @@ func _create_cascade():
 
 	projection = make_ortho_from_bounds(left, right, bottom, top, near_p, far_p)
 	
-	var view_proj = projection * Projection(cascade_transform)
+	view_proj = projection * Projection(cascade_transform)
 	cached_view_proj = flatten_projection_column_major(view_proj).to_byte_array()
 	
 	if (glob_mat_name != ""):
@@ -112,20 +112,20 @@ func _create_cascade():
 	rd.buffer_update(view_proj_uniform_buffer, 0, cached_view_proj.size(), cached_view_proj)
 	
 
-func make_ortho_from_bounds(left, right, bottom, top, near, far) -> Projection:
+func make_ortho_from_bounds(left, right, bottom, top, _near, _far) -> Projection:
 	var rl = right - left
 	var tb = top   - bottom
-	var fn = far   - near
+	var fn = _far   - _near
 
 	var x = Vector4( 2.0 / rl, 0.0,       0.0,       0.0)
 	var y = Vector4( 0.0,      2.0 / tb,  0.0,       0.0)
 	var z = Vector4( 0.0,      0.0,      1.0 / fn,   0.0)
-	var w = Vector4(-(right+left)/rl, -(top+bottom)/tb, -near/fn, 1.0)
+	var w = Vector4(-(right+left)/rl, -(top+bottom)/tb, -_near/fn, 1.0)
 
 	return Projection(x, y, z, w)
 	
 
-func get_frustum_corners(camera: Camera3D, near: float, far: float) -> Array:
+func get_frustum_corners(near: float, far: float) -> Array:
 	var corners = []
 
 	var fov = camera.fov
