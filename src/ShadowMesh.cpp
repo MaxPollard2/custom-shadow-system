@@ -181,10 +181,16 @@ void ShadowMesh::set_mesh_path(const NodePath &p_path) {
 
 void ShadowMesh::_exit_tree() {
     if (rd) {
-        if(vertex_buffer.is_valid()) rd->free_rid(vertex_buffer);
-        if(vertex_array_rid.is_valid()) rd->free_rid(vertex_array_rid);
-        
-        if(index_buffer.is_valid()) rd->free_rid(index_buffer);
-        if(index_array_rid.is_valid()) rd->free_rid(index_array_rid);            
+        auto safe_free = [&](RID &r) {
+            if (r.is_valid()) {
+                rd->free_rid(r);
+                r = RID();
+            }
+        };
+
+        safe_free(index_array_rid);
+        safe_free(vertex_array_rid);
+        safe_free(index_buffer);
+        safe_free(vertex_buffer);
     }
 }

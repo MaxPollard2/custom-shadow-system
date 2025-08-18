@@ -1,7 +1,6 @@
 extends Node
 class_name ShadowCascade
 
-var resolution = Vector2(4096, 4096)#(2048, 2048)#
 var color_texture: Texture2DRD
 
 var start : float
@@ -12,6 +11,7 @@ var rd : RenderingDevice
 var camera : Camera3D
 var near : float
 var far : float
+var resolution : int
 
 var fb_rid
 
@@ -19,42 +19,28 @@ var view : Transform3D
 var projection : Projection
 var view_proj : Projection
 var cached_view_proj : PackedByteArray
+var _range : Vector4
 
 var view_proj_uniform_buffer: RID
 var view_proj_uniform_set: RID
 
-
-var glob_tex_name : String = ""
 var glob_mat_name : String = ""
 var glob_range_name : String = ""
 
 
-func _init(_rd : RenderingDevice, _shadow : Shadow, _camera : Camera3D, _near : float, _far : float, _glob_tex_name : String = "", _glob_mat_name : String = "", _glob_range_name : String = "") -> void:
+func _init(_rd : RenderingDevice, _shadow : Shadow, _camera : Camera3D, _resolution : int, _glob_mat_name : String = "", _glob_range_name : String = "") -> void:
 	rd = _rd
 	shadow = _shadow
 	camera = _camera
-	near = _near
-	far = _far
+	resolution = _resolution
 	
-	glob_tex_name = _glob_tex_name
 	glob_mat_name = _glob_mat_name
 	glob_range_name = _glob_range_name
 	
-	_setup_buffers()
+func _set_range(_near : float, _far : float):
+	near = _near
+	far = _far
 	
-	
-func _setup_buffers() -> void:
-	var view_proj_matrix = flatten_projection_column_major(Projection.ZERO).to_byte_array()
-	view_proj_uniform_buffer = rd.uniform_buffer_create(view_proj_matrix.size(), view_proj_matrix)
-	
-	var uniform = RDUniform.new()
-	uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER
-	uniform.binding = 0
-	uniform.add_id(view_proj_uniform_buffer)
-	
-	view_proj_uniform_set = rd.uniform_set_create([uniform], shadow.shader_rid, 0)
-	
-	_create_render_target()
 	
 func _create_cascade():
 	#https://alextardif.com/shadowmapping.html
@@ -67,12 +53,24 @@ func _create_cascade():
 	var light_origin = world_center + (shadow.basis.z.normalized() * 250000)
 	var cascade_transform := Transform3D(shadow.basis.orthonormalized(), light_origin).affine_inverse()
 	
-	var radius : float = (world_center - corners[6]).length()#(corners[0] - corners[6]).length() * 0.5 #top left to bottom right
-	var texelsPerUnit = (resolution.x / (radius * 2.0));
+	var radius : float = (world_center - corners[6]).length()# * 0.75#(corners[0] - corners[6]).length() * 0.5 #top left to bottom right
+	var texels_per_unit = (resolution / (radius * 2.0));
+	
+	var floating_offset : Vector3 = Vector3.ZERO
+	if shadow.floating_origin:
+		floating_offset = _get_floating_offset()
+		floating_offset = cascade_transform.basis * floating_offset
+		
+		floating_offset.z = 0
+		floating_offset.x = fposmod(floating_offset.x * texels_per_unit, 1.0) / texels_per_unit
+		floating_offset.y = fposmod(floating_offset.y * texels_per_unit, 1.0) / texels_per_unit
 	
 	var l = cascade_transform * world_center
-	l.x = round(l.x * texelsPerUnit) / texelsPerUnit
-	l.y = round(l.y * texelsPerUnit) / texelsPerUnit
+	l.x = floor(l.x * texels_per_unit) / texels_per_unit
+	l.y = floor(l.y * texels_per_unit) / texels_per_unit
+	
+	l += floating_offset
+	
 	cascade_transform.origin = l
 	
 	for i in corners.size():
@@ -82,13 +80,16 @@ func _create_cascade():
 	var max_v = corners[0]
 		
 	for c in corners:
-		min_v = min_v.min(c)
-		max_v = max_v.max(c)
+		min_v = min_v.min(c)# + floating_offset
+		max_v = max_v.max(c)# + floating_offset
 	
-	var center_x = floor(((min_v.x + max_v.x) * 0.5) * texelsPerUnit) / texelsPerUnit
-	var center_y = floor(((min_v.y + max_v.y) * 0.5) * texelsPerUnit) / texelsPerUnit
+	var center_x = floor(((min_v.x + max_v.x) * 0.5) * texels_per_unit) / texels_per_unit
+	var center_y = floor(((min_v.y + max_v.y) * 0.5) * texels_per_unit) / texels_per_unit
 	
-	var half_size = ceil(radius * texelsPerUnit) / texelsPerUnit
+	#center_x -= floating_offset.x
+	#center_y -= floating_offset.y
+	
+	var half_size = ceil(radius * texels_per_unit) / texels_per_unit
 	
 	var left = center_x - half_size
 	var right = center_x + half_size
@@ -106,10 +107,15 @@ func _create_cascade():
 	if (glob_mat_name != ""):
 		RenderingServer.global_shader_parameter_set(glob_mat_name, view_proj)
 	if (glob_range_name != ""):
+		_range = Vector4(near, far, abs(far_p - near_p), 0.0)
 		RenderingServer.global_shader_parameter_set(glob_range_name, Vector3(near, far, abs(far_p - near_p)))
+		
 
-	
-	rd.buffer_update(view_proj_uniform_buffer, 0, cached_view_proj.size(), cached_view_proj)
+func _get_floating_offset():
+	if shadow.floating_origin_provider && shadow.floating_origin_provider.has_method("get_accumulated_offset"):
+		return shadow.floating_origin_provider.get_accumulated_offset()
+	else:
+		return Vector3.ZERO
 	
 
 func make_ortho_from_bounds(left, right, bottom, top, _near, _far) -> Projection:
@@ -125,16 +131,16 @@ func make_ortho_from_bounds(left, right, bottom, top, _near, _far) -> Projection
 	return Projection(x, y, z, w)
 	
 
-func get_frustum_corners(near: float, far: float) -> Array:
+func get_frustum_corners(_near: float, _far: float) -> Array:
 	var corners = []
 
 	var fov = camera.fov
-	var aspect = get_viewport().get_visible_rect().size.aspect()
+	var aspect = camera.get_viewport().get_visible_rect().size.aspect()
 	#var aspect = 1920.0 / 1080.0 #replace with viewport aspect ratio
 
-	var height_near = 2.0 * tan(deg_to_rad(fov) * 0.5) * near
+	var height_near = 2.0 * tan(deg_to_rad(fov) * 0.5) * _near
 	var width_near = height_near * aspect
-	var height_far = 2.0 * tan(deg_to_rad(fov) * 0.5) * far
+	var height_far = 2.0 * tan(deg_to_rad(fov) * 0.5) * _far
 	var width_far = height_far * aspect
 
 	var cam_transform = camera.global_transform
@@ -142,8 +148,8 @@ func get_frustum_corners(near: float, far: float) -> Array:
 	var right = cam_transform.basis.x
 	var up = cam_transform.basis.y
 
-	var near_center = cam_transform.origin + forward * near
-	var far_center = cam_transform.origin + forward * far
+	var near_center = cam_transform.origin + forward * _near
+	var far_center = cam_transform.origin + forward * _far
 
 	# Near plane
 	corners.append(near_center + up * (height_near * 0.5) - right * (width_near * 0.5)) # top left
@@ -158,33 +164,6 @@ func get_frustum_corners(near: float, far: float) -> Array:
 	corners.append(far_center - up * (height_far * 0.5) + right * (width_far * 0.5)) # bottom right
 
 	return corners
-	
-func _create_render_target():
-	color_texture = Texture2DRD.new()
-	
-	var color_format := RDTextureFormat.new()
-	color_format.format = shadow.color_format.format
-	color_format.usage_bits = shadow.color_format.usage_bits
-	color_format.width = resolution.x
-	color_format.height = resolution.y
-
-	var depth_format := RDTextureFormat.new()
-	depth_format.format = shadow.depth_format.format
-	depth_format.usage_bits = shadow.depth_format.usage_bits
-	depth_format.width = resolution.x
-	depth_format.height = resolution.y
-
-	var color_tex_rid := rd.texture_create(color_format, RDTextureView.new())
-	var depth_tex_rid := rd.texture_create(depth_format, RDTextureView.new())
-	
-	color_texture.texture_rd_rid = color_tex_rid
-
-	fb_rid = rd.framebuffer_create([color_tex_rid, depth_tex_rid], shadow.fb_format)
-	
-	if (glob_tex_name != ""):
-		RenderingServer.global_shader_parameter_set(glob_tex_name, color_texture)
-		print("setting tex")
-		#RenderingServer.global_shader_parameter_set(global_uniform_size_name, size)
 	
 	
 func flatten_projection_column_major(p: Projection) -> PackedFloat32Array:

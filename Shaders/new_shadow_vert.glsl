@@ -3,10 +3,13 @@
 
 layout(location = 0) in vec3 a_position;
 
-const uint NUM_CASCADES = 5;
+const uint MAX_CASCADES = 20;
 
 layout(std140, set = 0, binding = 0) uniform TransformData {
-    mat4 view_proj[NUM_CASCADES]; // e.g., 5
+    mat4 view_proj[MAX_CASCADES];
+    vec4 range[MAX_CASCADES];
+    uint cascade_count; // not needed
+    float shadow_resolution;
 };
 
 layout(std430, set = 1, binding = 0) readonly buffer Models {
