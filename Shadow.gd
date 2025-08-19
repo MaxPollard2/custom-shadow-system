@@ -23,7 +23,7 @@ var floating_origin_provider
 var rect: TextureRect
 var camera: Camera3D
 
-var CASCADE_NUMBER = 6
+var CASCADE_NUMBER = 4
 var MAX_CASCADE = 20
 var texture_format : RDTextureFormat
 var depth_format_new : RDTextureFormat
@@ -40,6 +40,7 @@ var view_proj_uniform_set: RID
 
 func _ready() -> void:
 	camera = get_viewport().get_camera_3d()
+		
 	while camera == null:
 		await get_tree().process_frame
 		camera = get_viewport().get_camera_3d()
@@ -71,6 +72,9 @@ func _ready() -> void:
 
 
 func _create_cascades(split_count: int = CASCADE_NUMBER) -> void:
+	if debug_position: 
+		RenderingServer.global_shader_parameter_set("light_dir", global_basis.z)
+	
 	shadow_cascades.clear()
 
 	for i in range(split_count):
@@ -85,7 +89,7 @@ func _create_cascades(split_count: int = CASCADE_NUMBER) -> void:
 	_set_cascades()
 
 
-func _set_cascades(lambda: float = 0.95, max_range = 100000, first_cascade = 60):
+func _set_cascades(lambda: float = 0.95, max_range = 8192, first_cascade = 16):
 	var near = camera.near
 	var far = min(max_range, camera.far)
 	var split_start = near

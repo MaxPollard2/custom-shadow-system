@@ -1,20 +1,15 @@
-global uniform sampler2D cascade_1_map;
 global uniform mat4 cascade_1_view_proj;
 global uniform vec3 cascade_1_range;
 
-global uniform sampler2D cascade_2_map;
 global uniform mat4 cascade_2_view_proj;
 global uniform vec3 cascade_2_range;
 
-global uniform sampler2D cascade_3_map;
 global uniform mat4 cascade_3_view_proj;
 global uniform vec3 cascade_3_range;
 
-global uniform sampler2D cascade_4_map;
 global uniform mat4 cascade_4_view_proj;
 global uniform vec3 cascade_4_range;
 
-global uniform sampler2D cascade_5_map;
 global uniform mat4 cascade_5_view_proj;
 global uniform vec3 cascade_5_range;
 
@@ -54,18 +49,18 @@ float get_shadow_from_cascade_2(vec3 in_world_position, float slope, float map_i
 
 	float _radius = 1.0 / (RESOLUTION * 2.0);
 
-	float bias = (texel_width / (light_depth * 1.0)) * max(slope, 1.0);
-	bias *= 1.5;
+	float bias = (texel_width / (light_depth * 1.0)) * max(slope * 2.0, 1.0);
+	bias *= 0.1;
 //
     return compute_shadow_pcf_2(map_index, uv, shadow_coord.z - bias, _radius);
 }
 
-float get_shadow(vec3 world_normal, vec3 light_dir, mat4 view_matrix, vec3 in_world_position, out vec3 debug_colour)
+float get_shadow(vec3 world_normal, vec3 in_light_dir, mat4 view_matrix, vec3 in_world_position, out vec3 debug_colour)
 {
 	float shadow = 0.0;
 	float total_samples = float((2 * SAMPLES + 1) * (2 * SAMPLES + 1));
 
-	float slope = 1.0 - abs(dot(world_normal, light_dir));
+	float slope = 1.0 - abs(dot(world_normal, in_light_dir));
 	slope = 1.0;
 
 	float eye_depth  = -(view_matrix * vec4(in_world_position, 1.0)).z;
