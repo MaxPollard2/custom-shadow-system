@@ -50,7 +50,11 @@ public:
 
     void update_from_mesh(MeshInstance3D *mesh_instance);
 
+    void generate_from_data(const PackedByteArray &vertex_data, const PackedByteArray &index_data = PackedByteArray());
+
     void update_vertex_buffer_from_array(const PackedVector3Array &vertex_array);
+
+    void update_vertex_buffer_from_data(const PackedByteArray &vertex_data);
 
     void update_model_matrix();
 

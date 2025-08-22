@@ -17,12 +17,12 @@ global uniform mat4 cascade_6_view_proj;
 global uniform vec3 cascade_6_range;
 
 global uniform sampler2DArray cascade_maps;
+global uniform float shadow_resolution;
 
-const float RESOLUTION = 2048.0;
-const int SAMPLES = 1;
+const int SAMPLES = 2;
 
 
-float compute_shadow_pcf_2(float map_index, vec2 uv, float compare_depth, float radius) {
+float compute_shadow_pcf(float map_index, vec2 uv, float compare_depth, float radius) {
 	float shadow = 0.0;
 	for (int x = -SAMPLES; x <= SAMPLES; x++) {
 		for (int y = -SAMPLES; y <= SAMPLES; y++) {
@@ -37,7 +37,7 @@ float compute_shadow_pcf_2(float map_index, vec2 uv, float compare_depth, float 
 }
 
 
-float get_shadow_from_cascade_2(vec3 in_world_position, float slope, float map_index, mat4 view_proj, float light_depth, out vec3 out_uv)
+float get_shadow_from_cascade(vec3 in_world_position, float slope, float map_index, mat4 view_proj, float light_depth, out vec3 out_uv)
 {
 	vec4 light_space_pos = view_proj * vec4(in_world_position, 1.0);
 	vec3 shadow_coord = light_space_pos.xyz / light_space_pos.w;
@@ -45,14 +45,14 @@ float get_shadow_from_cascade_2(vec3 in_world_position, float slope, float map_i
 	out_uv = shadow_coord;
 
 	float world_width = 2.0 / abs(view_proj[0][0]);
-	float texel_width = (world_width / RESOLUTION);
+	float texel_width = (world_width / shadow_resolution);
 
-	float _radius = 1.0 / (RESOLUTION * 2.0);
+	float _radius = 1.0 / (shadow_resolution);
 
-	float bias = (texel_width / (light_depth * 1.0)) * max(slope * 2.0, 1.0);
-	bias *= 0.1;
+	float bias = (texel_width / (light_depth * 0.5)) * max(slope * 2.0, 1.0);
+	bias *= 0.5;
 //
-    return compute_shadow_pcf_2(map_index, uv, shadow_coord.z - bias, _radius);
+    return compute_shadow_pcf(map_index, uv, shadow_coord.z - bias, _radius);
 }
 
 float get_shadow(vec3 world_normal, vec3 in_light_dir, mat4 view_matrix, vec3 in_world_position, out vec3 debug_colour)
@@ -69,32 +69,32 @@ float get_shadow(vec3 world_normal, vec3 in_light_dir, mat4 view_matrix, vec3 in
 
 	if (eye_depth < cascade_1_range.y)
 	{
-		shadow = get_shadow_from_cascade_2(in_world_position, slope, 0.1, cascade_1_view_proj, cascade_1_range.z, out_uv);
+		shadow = get_shadow_from_cascade(in_world_position, slope, 0.1, cascade_1_view_proj, cascade_1_range.z, out_uv);
 		debug_colour = vec3(1.0, 0.0, 0.0); // RED
 	}
 	else if (eye_depth < cascade_2_range.y)
 	{
-		shadow = get_shadow_from_cascade_2(in_world_position, slope, 1.0, cascade_2_view_proj, cascade_2_range.z, out_uv);
+		shadow = get_shadow_from_cascade(in_world_position, slope, 1.0, cascade_2_view_proj, cascade_2_range.z, out_uv);
 		debug_colour = vec3(0.0, 1.0, 0.0); // GREEN
 	}
 	else if (eye_depth < cascade_3_range.y)
 	{
-		shadow = get_shadow_from_cascade_2(in_world_position, slope, 2.0, cascade_3_view_proj, cascade_3_range.z, out_uv);
+		shadow = get_shadow_from_cascade(in_world_position, slope, 2.0, cascade_3_view_proj, cascade_3_range.z, out_uv);
 		debug_colour = vec3(0.0, 0.0, 1.0); // BLUE
 	}
 	else if (eye_depth < cascade_4_range.y)
 	{
-		shadow = get_shadow_from_cascade_2(in_world_position, slope, 3.0, cascade_4_view_proj, cascade_4_range.z, out_uv);
+		shadow = get_shadow_from_cascade(in_world_position, slope, 3.0, cascade_4_view_proj, cascade_4_range.z, out_uv);
 		debug_colour = vec3(1.0, 1.0, 0.0); // YELLOW
 	}
 	else if (eye_depth < cascade_5_range.y)
 	{
-		shadow = get_shadow_from_cascade_2(in_world_position, slope, 4.0, cascade_5_view_proj, cascade_5_range.z, out_uv);
+		shadow = get_shadow_from_cascade(in_world_position, slope, 4.0, cascade_5_view_proj, cascade_5_range.z, out_uv);
 		debug_colour = vec3(0.0, 1.0, 1.0); // CYAN
 	}
 	else if (eye_depth < cascade_6_range.y)
 	{
-		shadow = get_shadow_from_cascade_2(in_world_position, slope, 5.0, cascade_6_view_proj, cascade_6_range.z, out_uv);
+		shadow = get_shadow_from_cascade(in_world_position, slope, 5.0, cascade_6_view_proj, cascade_6_range.z, out_uv);
 		debug_colour = vec3(1.0, 0.0, 1.0); // CYAN
 	}
 	else

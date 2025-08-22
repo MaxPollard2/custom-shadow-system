@@ -80,14 +80,11 @@ func _create_cascade():
 	var max_v = corners[0]
 		
 	for c in corners:
-		min_v = min_v.min(c)# + floating_offset
-		max_v = max_v.max(c)# + floating_offset
+		min_v = min_v.min(c)
+		max_v = max_v.max(c)
 	
 	var center_x = floor(((min_v.x + max_v.x) * 0.5) * texels_per_unit) / texels_per_unit
 	var center_y = floor(((min_v.y + max_v.y) * 0.5) * texels_per_unit) / texels_per_unit
-	
-	#center_x -= floating_offset.x
-	#center_y -= floating_offset.y
 	
 	var half_size = ceil(radius * texels_per_unit) / texels_per_unit
 	

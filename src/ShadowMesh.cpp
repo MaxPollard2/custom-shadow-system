@@ -13,9 +13,11 @@ using namespace godot;
 void ShadowMesh::_bind_methods() {
     // Core methods
     ClassDB::bind_method(D_METHOD("generate_from_mesh", "mesh_instance_3d"), &ShadowMesh::generate_from_mesh);
+    ClassDB::bind_method(D_METHOD("generate_from_data", "vertex_data", "index_data"), &ShadowMesh::generate_from_data);
     ClassDB::bind_method(D_METHOD("update_from_mesh", "mesh_instance_3d"), &ShadowMesh::update_from_mesh);
     ClassDB::bind_method(D_METHOD("update_model_matrix"), &ShadowMesh::update_model_matrix);
     ClassDB::bind_method(D_METHOD("update_vertex_buffer_from_array", "PackedVector3Array"), &ShadowMesh::update_vertex_buffer_from_array);
+    ClassDB::bind_method(D_METHOD("update_vertex_buffer_from_data", "PackedByteArray"), &ShadowMesh::update_vertex_buffer_from_data);
 
     // Accessors
     ClassDB::bind_method(D_METHOD("get_vertex_array_rid"), &ShadowMesh::get_vertex_array_rid);
@@ -129,6 +131,38 @@ void ShadowMesh::generate_from_mesh(MeshInstance3D *mesh_instance)
     set_dirty(true);
 }
 
+void godot::ShadowMesh::generate_from_data(const PackedByteArray &vertex_data, const PackedByteArray &index_data)
+{
+    Ref<RDVertexAttribute> vertex_attribute;
+    vertex_attribute.instantiate();
+    vertex_attribute->set_offset(0);
+    vertex_attribute->set_stride(12);
+    vertex_attribute->set_location(0);
+    vertex_attribute->set_format(RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT);
+
+    TypedArray<Ref<RDVertexAttribute>> attributes;
+    attributes.push_back(vertex_attribute);
+
+    int64_t vertex_format = rd->vertex_format_create(attributes);
+
+    vertex_buffer = rd->vertex_buffer_create(vertex_data.size(), vertex_data);
+
+    TypedArray<RID> vertex_buffer_array;
+    vertex_buffer_array.push_back(vertex_buffer);
+    
+    vertex_array_rid = rd->vertex_array_create(uint32_t(vertex_data.size() / 12.0), vertex_format, vertex_buffer_array);
+
+    indexed = !index_data.is_empty();
+    if (indexed)
+    {
+        index_buffer = rd->index_buffer_create(uint32_t(index_data.size() / 4.0), RenderingDevice::INDEX_BUFFER_FORMAT_UINT32, index_data);
+        index_array_rid = rd->index_array_create(index_buffer, 0, uint32_t(index_data.size() / 4.0));
+    }
+
+    set_dirty(true);
+}
+
+
 
 void godot::ShadowMesh::update_from_mesh(MeshInstance3D *mesh_instance)
 {
@@ -148,9 +182,15 @@ void godot::ShadowMesh::update_from_mesh(MeshInstance3D *mesh_instance)
     set_dirty(true);
 }
 
+
 void godot::ShadowMesh::update_vertex_buffer_from_array(const PackedVector3Array &vertex_array)
 {
     rd->buffer_update(vertex_buffer, 0, vertex_array.size() * 12, vertex_array.to_byte_array());
+}
+
+void godot::ShadowMesh::update_vertex_buffer_from_data(const PackedByteArray &vertex_data)
+{
+    rd->buffer_update(vertex_buffer, 0, vertex_data.size(), vertex_data);
 }
 
 
@@ -163,14 +203,12 @@ void ShadowMesh::update_model_matrix()
     const Vector3 c2 = b.get_column(2);
     const Vector3 o  = get_global_transform().get_origin();
 
-    float m[16] = {
-        (float)c0.x, (float)c0.y, (float)c0.z, 0.0f,
-        (float)c1.x, (float)c1.y, (float)c1.z, 0.0f,
-        (float)c2.x, (float)c2.y, (float)c2.z, 0.0f,
-        (float)o.x,  (float)o.y,  (float)o.z,  1.0f
-    };
-    
-    std::memcpy(model_matrix.ptrw(), m, sizeof(m));
+    float *m = reinterpret_cast<float *>(model_matrix.ptrw());
+
+    m[0] = c0.x;    m[1] = c0.y;   m[2] = c0.z;  m[3] = 0.0f;
+    m[4] = c1.x;    m[5] = c1.y;   m[6] = c1.z;  m[7] = 0.0f;
+    m[8] = c2.x;    m[9] = c2.y;   m[10] = c2.z; m[11] = 0.0f;
+    m[12] = o.x;    m[13] = o.y;   m[14] = o.z;  m[15] = 1.0f;
 }
 
 

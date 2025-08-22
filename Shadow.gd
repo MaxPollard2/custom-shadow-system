@@ -18,6 +18,9 @@ var frag_shader_path: String = "res://shadow_system/shaders/new_shadow_frag.spv"
 
 @export var floating_origin := true
 @export var floating_origin_provider_path : NodePath
+
+@export_range(100, 1000000, 100) var shadow_range := 100000
+
 var floating_origin_provider
 
 var rect: TextureRect
@@ -28,14 +31,19 @@ var MAX_CASCADE = 20
 var texture_format : RDTextureFormat
 var depth_format_new : RDTextureFormat
 var fb_format : int
-var RESOLUTION = 2048#4096
+var RESOLUTION = 8192#2048#4096
 var fb_rid
 var pipeline : RID
 var shader_rid : RID
 var texture_array : Texture2DArrayRD
 
+var color_tex_rid : RID
+var depth_tex_rid : RID
+
 var view_proj_uniform_buffer: RID
 var view_proj_uniform_set: RID
+
+signal textures_generated
 
 
 func _ready() -> void:
@@ -52,7 +60,7 @@ func _ready() -> void:
 	_load_shader()
 	
 	_setup_pipeline()
-	_create_formats_new()
+	_create_formats()
 	
 	_create_view_proj_buffer()
 	
@@ -89,9 +97,9 @@ func _create_cascades(split_count: int = CASCADE_NUMBER) -> void:
 	_set_cascades()
 
 
-func _set_cascades(lambda: float = 0.95, max_range = 8192, first_cascade = 16):
+func _set_cascades(lambda: float = 0.95, first_cascade = 60):
 	var near = camera.near
-	var far = min(max_range, camera.far)
+	var far = min(shadow_range, camera.far)
 	var split_start = near
 	
 	
@@ -110,12 +118,14 @@ func _set_cascades(lambda: float = 0.95, max_range = 8192, first_cascade = 16):
 		
 		var split_dist = lerp(linear_split, log_split, lambda)
 		
+		if (shadow_cascades.size() == 1): split_dist = far
 		var split_end = split_dist
 		
 		print("cascade ", i, " : ", split_start, " ", split_end)
 		
 		var cascade = shadow_cascades[i]
 		cascade._set_range(split_start, split_end)
+		cascade.resolution = RESOLUTION
 		
 		split_start = split_end
 	
@@ -134,10 +144,19 @@ func _update_model_matrices():
 	shadow_helper.update_model_matrices(mesh_instances)
 
 func _run_cascades_instanced():
+	var start = Time.get_ticks_usec()
+	
 	var aabb_info := _create_aabb()
+	
+	var aabb = Time.get_ticks_usec()
+	
 	shadow_helper.run_cascades_instanced(fb_rid, view_proj_uniform_set, mesh_instances, CASCADE_NUMBER, aabb_info.transform, aabb_info.aabb)
 	
-func _create_aabb(near: float = camera.near, far: float = 100000.0) -> Dictionary:
+	var end = Time.get_ticks_usec()
+	
+func _create_aabb() -> Dictionary:
+	var near = camera.near
+	var far = min(shadow_range, camera.far)
 	var corners := get_frustum_corners(camera, near, far)
 
 	var center := Vector3.ZERO
@@ -209,7 +228,7 @@ func _load_shader():
 		push_error("Shader compilation failed!")
 
 
-func _create_formats_new():
+func _create_formats():
 	texture_format = RDTextureFormat.new()
 	texture_format.format = RenderingDevice.DATA_FORMAT_R32_SFLOAT
 	texture_format.usage_bits = (
@@ -238,16 +257,23 @@ func _create_formats_new():
 	depth_attach2.format = depth_format_new.format
 	depth_attach2.usage_flags = depth_format_new.usage_bits
 	
-	var color_tex_rid := rd.texture_create(texture_format, RDTextureView.new())
-	var depth_tex_rid := rd.texture_create(depth_format_new, RDTextureView.new())
+	if fb_rid && fb_rid.is_valid(): rd.free_rid(fb_rid)
+	if color_tex_rid && color_tex_rid.is_valid(): rd.free_rid(color_tex_rid)
+	if depth_tex_rid && depth_tex_rid.is_valid(): rd.free_rid(depth_tex_rid)
+	
+	color_tex_rid = rd.texture_create(texture_format, RDTextureView.new())
+	depth_tex_rid = rd.texture_create(depth_format_new, RDTextureView.new())
 	
 	texture_array = Texture2DArrayRD.new()
 	texture_array.texture_rd_rid = color_tex_rid
 	
+	RenderingServer.global_shader_parameter_set("shadow_resolution", RESOLUTION)
 	RenderingServer.global_shader_parameter_set("cascade_maps", texture_array)
 
 	fb_format = rd.framebuffer_format_create([color_attach2, depth_attach2], CASCADE_NUMBER) 
 	fb_rid = rd.framebuffer_create([color_tex_rid, depth_tex_rid], fb_format, CASCADE_NUMBER)
+	
+	textures_generated.emit()
 	
 	
 func _create_view_proj_buffer():
